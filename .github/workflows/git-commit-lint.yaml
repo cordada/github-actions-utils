@@ -1,0 +1,69 @@
+name: Git Commit Linter
+
+on:
+  workflow_call:
+    inputs:
+      commitlint_cli_version:
+        type: string
+        required: false
+        default: "17.0.3"
+        description: Commitlint CLI Version
+      commitlint_config_conventional_version:
+        type: string
+        required: false
+        default: "17.0.3"
+        description: Version of Commitlint Configuration for Conventional Commits
+      vcs_ref_from:
+        type: string
+        required: false
+        default: ${{ github.event.pull_request.base.sha || github.sha }}
+        description: VCS Reference Range - From
+      vcs_ref_to:
+        type: string
+        required: false
+        default: ${{ github.event.pull_request.head.sha || github.sha }}
+        description: VCS Reference Range - To
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-20.04
+
+    env:
+      COMMITLINT_CLI_VERSION: ${{ inputs.commitlint_cli_version }}
+      COMMITLINT_CONFIG_CONVENTIONAL_VERSION: ${{ inputs.commitlint_config_conventional_version }}
+
+    steps:
+      - name: Check Out VCS Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Restoring/Saving Cache
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: js-v1-deps-${{ runner.os }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CONVENTIONAL_VERSION }}
+
+      - name: Install Dependencies
+        run: |
+          npm install @commitlint/cli@"${COMMITLINT_CLI_VERSION}"
+          npm install @commitlint/config-conventional@"${COMMITLINT_CONFIG_CONVENTIONAL_VERSION}"
+        env:
+          npm_config_audit: "false"
+          npm_config_fund: "false"
+
+      - name: Lint Git Commit Messages
+        run: |
+          npm exec -- commitlint --from "$VCS_REF_FROM" --to "$VCS_REF_TO"
+        env:
+          VCS_REF_FROM: ${{ inputs.vcs_ref_from }}
+          VCS_REF_TO: ${{ inputs.vcs_ref_to }}
