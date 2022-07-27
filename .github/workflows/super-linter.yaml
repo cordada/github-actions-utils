@@ -1,0 +1,105 @@
+# GitHub Actions Workflow for Super-Linter
+#
+# Super-Linter is a simple combination of various linters, written in bash, to help validate your
+# source code.
+#
+# - Web site: https://github.com/github/super-linter/
+# - Documentation: https://github.com/github/super-linter#readme
+
+name: Super-Linter
+
+on:
+  workflow_call:
+    inputs:
+      default_git_branch:
+        type: string
+        required: true
+        description: Default Branch of Git Repository
+
+      validate_editorconfig:
+        type: boolean
+        required: false
+        default: false
+      validate_markdown:
+        type: boolean
+        required: false
+        default: false
+      validate_python_black:
+        type: boolean
+        required: false
+        default: false
+      validate_python_flake8:
+        type: boolean
+        required: false
+        default: false
+      validate_python_isort:
+        type: boolean
+        required: false
+        default: false
+      validate_python_mypy:
+        type: boolean
+        required: false
+        default: false
+
+      markdown_config_file:
+        type: string
+        required: false
+        default: .markdownlint.yaml
+      python_black_config_file:
+        type: string
+        required: false
+        default: .black.cfg.toml
+
+permissions:
+  contents: read
+  statuses: write
+  checks: write
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Check Out VCS Repository
+        uses: actions/checkout@v3
+        with:
+          # Full git history is needed to get a proper list of changed files within `super-linter`.
+          fetch-depth: 0
+
+      - name: Configure Super-Linter
+        run: |
+          for language_var_name in ${LANGUAGE_VAR_NAMES:?}; do
+            if [ "${!language_var_name}" == 'true' ]; then
+              echo "${language_var_name^^}=true" >> "$GITHUB_ENV"
+            fi
+          done
+        env:
+          LANGUAGE_VAR_NAMES: >-
+            validate_editorconfig
+            validate_markdown
+            validate_python_black
+            validate_python_flake8
+            validate_python_isort
+            validate_python_mypy
+          validate_editorconfig: ${{ inputs.validate_editorconfig }}
+          validate_markdown: ${{ inputs.validate_markdown }}
+          validate_python_black: ${{ inputs.validate_python_black }}
+          validate_python_flake8: ${{ inputs.validate_python_flake8 }}
+          validate_python_isort: ${{ inputs.validate_python_isort }}
+          validate_python_mypy: ${{ inputs.validate_python_mypy }}
+
+      - name: Lint
+        uses: github/super-linter/slim@v4.9.5
+        env:
+          DEFAULT_BRANCH: ${{ inputs.default_git_branch }}
+          LINTER_RULES_PATH: /
+          VALIDATE_ALL_CODEBASE: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          EDITORCONFIG_FILE_NAME: .ecrc
+          MARKDOWN_CONFIG_FILE: ${{ inputs.markdown_config_file }}
+          PYTHON_BLACK_CONFIG_FILE: ${{ inputs.python_black_config_file }}
+          PYTHON_FLAKE8_CONFIG_FILE: .flake8
+          PYTHON_ISORT_CONFIG_FILE: .isort.cfg
+          PYTHON_MYPY_CONFIG_FILE: mypy.ini
