@@ -74,6 +74,30 @@ jobs:
               echo "${language_var_name^^}=true" >> "$GITHUB_ENV"
             fi
           done
+
+          if [ "$validate_editorconfig" == 'true' ]; then
+            echo "EDITORCONFIG_FILE_NAME=.ecrc" >> "$GITHUB_ENV"
+          fi
+
+          if [ "$validate_markdown" == 'true' ]; then
+            echo "MARKDOWN_CONFIG_FILE=${{ inputs.markdown_config_file }}" >> "$GITHUB_ENV"
+          fi
+
+          if [ "$validate_python_black" == 'true' ]; then
+            echo "PYTHON_BLACK_CONFIG_FILE=${{ inputs.python_black_config_file }}" >> "$GITHUB_ENV"
+          fi
+
+          if [ "$validate_python_flake8" == 'true' ]; then
+            echo "PYTHON_FLAKE8_CONFIG_FILE=.flake8" >> "$GITHUB_ENV"
+          fi
+
+          if [ "$validate_python_isort" == 'true' ]; then
+            echo "PYTHON_ISORT_CONFIG_FILE=.isort.cfg" >> "$GITHUB_ENV"
+          fi
+
+          if [ "$validate_python_mypy" == 'true' ]; then
+            echo "PYTHON_MYPY_CONFIG_FILE=mypy.ini" >> "$GITHUB_ENV"
+          fi
         env:
           LANGUAGE_VAR_NAMES: >-
             validate_editorconfig
@@ -96,10 +120,3 @@ jobs:
           LINTER_RULES_PATH: /
           VALIDATE_ALL_CODEBASE: true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          EDITORCONFIG_FILE_NAME: .ecrc
-          MARKDOWN_CONFIG_FILE: ${{ inputs.markdown_config_file }}
-          PYTHON_BLACK_CONFIG_FILE: ${{ inputs.python_black_config_file }}
-          PYTHON_FLAKE8_CONFIG_FILE: .flake8
-          PYTHON_ISORT_CONFIG_FILE: .isort.cfg
-          PYTHON_MYPY_CONFIG_FILE: mypy.ini
