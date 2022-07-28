@@ -55,6 +55,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          rm -f package.json package-lock.json
+
           npm install @commitlint/cli@"${COMMITLINT_CLI_VERSION}"
           npm install @commitlint/config-conventional@"${COMMITLINT_CONFIG_CONVENTIONAL_VERSION}"
         env:
