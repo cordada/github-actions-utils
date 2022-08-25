@@ -8,11 +8,11 @@ on:
         required: false
         default: "17.0.3"
         description: Commitlint CLI Version
-      commitlint_config_conventional_version:
+      commitlint_config_cordada_version:
         type: string
         required: false
-        default: "17.0.3"
-        description: Version of Commitlint Configuration for Conventional Commits
+        default: "0.1.0"
+        description: Version of Commitlint Configuration for Cordada
       vcs_ref_from:
         type: string
         required: false
@@ -34,7 +34,8 @@ jobs:
 
     env:
       COMMITLINT_CLI_VERSION: ${{ inputs.commitlint_cli_version }}
-      COMMITLINT_CONFIG_CONVENTIONAL_VERSION: ${{ inputs.commitlint_config_conventional_version }}
+      COMMITLINT_CONFIG_CORDADA_VERSION: ${{ inputs.commitlint_config_cordada_version }}
+      CORDADA_NPM_REGISTRY: https://registry.npmjs.org
 
     steps:
       - name: Check Out VCS Repository
@@ -51,14 +52,16 @@ jobs:
         uses: actions/cache@v3
         with:
           path: node_modules
-          key: js-v1-deps-${{ runner.os }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CONVENTIONAL_VERSION }}
+          key: js-v2-deps-${{ runner.os }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CORDADA_VERSION }}
 
       - name: Install Dependencies
         run: |
           rm -f package.json package-lock.json
 
+          npm config set @cordada:registry="${CORDADA_NPM_REGISTRY}"
+
           npm install @commitlint/cli@"${COMMITLINT_CLI_VERSION}"
-          npm install @commitlint/config-conventional@"${COMMITLINT_CONFIG_CONVENTIONAL_VERSION}"
+          npm install @cordada/commitlint-config-cordada@"${COMMITLINT_CONFIG_CORDADA_VERSION}"
         env:
           npm_config_audit: "false"
           npm_config_fund: "false"
