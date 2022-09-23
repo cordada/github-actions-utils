@@ -24,6 +24,10 @@ on:
         type: boolean
         required: false
         default: false
+      validate_openapi:
+        type: boolean
+        required: false
+        default: false
       validate_python_black:
         type: boolean
         required: false
@@ -102,12 +106,14 @@ jobs:
           LANGUAGE_VAR_NAMES: >-
             validate_editorconfig
             validate_markdown
+            validate_openapi
             validate_python_black
             validate_python_flake8
             validate_python_isort
             validate_python_mypy
           validate_editorconfig: ${{ inputs.validate_editorconfig }}
           validate_markdown: ${{ inputs.validate_markdown }}
+          validate_openapi: ${{ inputs.validate_openapi }}
           validate_python_black: ${{ inputs.validate_python_black }}
           validate_python_flake8: ${{ inputs.validate_python_flake8 }}
           validate_python_isort: ${{ inputs.validate_python_isort }}
