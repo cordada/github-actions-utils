@@ -1,9 +1,0 @@
-# GitHub Dependency Review Configuration for Free and Open Source Software
-#
-# Dependency review helps you understand dependency changes and the security impact of these
-# changes.
-#
-# Documentation:
-# - https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review
-
-fail-on-severity: critical
