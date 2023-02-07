@@ -15,6 +15,11 @@ on:
         type: string
         required: true
         description: Default Branch of Git Repository
+      validate_all_codebase:
+        type: boolean
+        required: false
+        default: true
+        description: When `true`, validate all files; when `false`, only new or edited files.
 
       validate_editorconfig:
         type: boolean
@@ -124,5 +129,5 @@ jobs:
         env:
           DEFAULT_BRANCH: ${{ inputs.default_git_branch }}
           LINTER_RULES_PATH: /
-          VALIDATE_ALL_CODEBASE: true
+          VALIDATE_ALL_CODEBASE: ${{ inputs.validate_all_codebase }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
