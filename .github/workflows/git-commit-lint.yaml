@@ -11,7 +11,7 @@ on:
       commitlint_config_cordada_version:
         type: string
         required: false
-        default: "0.1.0"
+        default: "0.1.1"
         description: Version of Commitlint Configuration for Cordada
       vcs_ref_from:
         type: string
