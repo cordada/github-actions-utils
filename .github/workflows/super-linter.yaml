@@ -125,7 +125,7 @@ jobs:
           validate_python_mypy: ${{ inputs.validate_python_mypy }}
 
       - name: Lint
-        uses: super-linter/super-linter/slim@v4.10.1
+        uses: super-linter/super-linter/slim@v5.1.1
         env:
           DEFAULT_BRANCH: ${{ inputs.default_git_branch }}
           LINTER_RULES_PATH: /
