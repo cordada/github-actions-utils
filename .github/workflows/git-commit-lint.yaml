@@ -6,7 +6,7 @@ on:
       commitlint_cli_version:
         type: string
         required: false
-        default: "17.4.3"
+        default: "19.0.3"
         description: Commitlint CLI Version
       commitlint_config_cordada_version:
         type: string
@@ -39,20 +39,21 @@ jobs:
 
     steps:
       - name: Check Out VCS Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.1
         with:
           fetch-depth: 0
 
       - name: Set Up Node.js
-        uses: actions/setup-node@v4
+        id: set_up_nodejs
+        uses: actions/setup-node@v4.0.2
         with:
-          node-version: "16"
+          node-version: "20"
 
       - name: Restoring/Saving Cache
         uses: actions/cache@v4.0.1
         with:
           path: node_modules
-          key: js-v2-deps-${{ runner.os }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CORDADA_VERSION }}
+          key: js-v2-deps-${{ runner.os }}-${{ steps.set_up_nodejs.outputs.node-version }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CORDADA_VERSION }}
 
       - name: Install Dependencies
         run: |
