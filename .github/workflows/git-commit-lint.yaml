@@ -49,7 +49,7 @@ jobs:
           node-version: "16"
 
       - name: Restoring/Saving Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4.0.1
         with:
           path: node_modules
           key: js-v2-deps-${{ runner.os }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CORDADA_VERSION }}
