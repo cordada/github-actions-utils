@@ -3,8 +3,8 @@
 # Super-Linter is a simple combination of various linters, written in bash, to help validate your
 # source code.
 #
-# - Web site: https://github.com/github/super-linter/
-# - Documentation: https://github.com/github/super-linter#readme
+# - Web site: https://github.com/super-linter/super-linter/
+# - Documentation: https://github.com/super-linter/super-linter#readme
 
 name: Super-Linter
 
