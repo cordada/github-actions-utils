@@ -139,7 +139,7 @@ jobs:
           validate_sqlfluff: ${{ inputs.validate_sql_sqlfluff }}
 
       - name: Lint
-        uses: super-linter/super-linter/slim@v6.6.0
+        uses: super-linter/super-linter/slim@v6.8.0
         env:
           DEFAULT_BRANCH: ${{ inputs.default_git_branch }}
           LINTER_RULES_PATH: /
