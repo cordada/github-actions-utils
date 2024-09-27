@@ -6,7 +6,7 @@ on:
       commitlint_cli_version:
         type: string
         required: false
-        default: "19.3.0"
+        default: "19.5.0"
         description: Commitlint CLI Version
       commitlint_config_cordada_version:
         type: string
