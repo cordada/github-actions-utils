@@ -45,12 +45,12 @@ jobs:
 
       - name: Set Up Node.js
         id: set_up_nodejs
-        uses: actions/setup-node@v4.0.3
+        uses: actions/setup-node@v4.1.0
         with:
           node-version: "20"
 
       - name: Restoring/Saving Cache
-        uses: actions/cache@v4.0.2
+        uses: actions/cache@v4.1.2
         with:
           path: node_modules
           key: js-v2-deps-${{ runner.os }}-${{ steps.set_up_nodejs.outputs.node-version }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CORDADA_VERSION }}
