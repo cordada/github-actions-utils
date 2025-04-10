@@ -47,7 +47,7 @@ jobs:
         id: set_up_nodejs
         uses: actions/setup-node@v4.2.0
         with:
-          node-version: "20"
+          node-version: "lts/*"
 
       - name: Restoring/Saving Cache
         uses: actions/cache@v4.2.2
