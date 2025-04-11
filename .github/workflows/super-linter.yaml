@@ -26,7 +26,7 @@ on:
         required: false
         default: false
       validate_json_prettier:
-        type: bool
+        type: boolean
         required: false
         default: false
       validate_markdown:
@@ -58,7 +58,7 @@ on:
         required: false
         default: false
       validate_yaml_prettier:
-        type: bool
+        type: boolean
         required: false
         default: false
 
