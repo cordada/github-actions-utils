@@ -25,6 +25,10 @@ on:
         type: boolean
         required: false
         default: false
+      validate_json_prettier:
+        type: bool
+        required: false
+        default: false
       validate_markdown:
         type: boolean
         required: false
@@ -51,6 +55,10 @@ on:
         default: false
       validate_sql_sqlfluff:
         type: boolean
+        required: false
+        default: false
+      validate_yaml_prettier:
+        type: bool
         required: false
         default: false
 
@@ -122,6 +130,7 @@ jobs:
         env:
           LANGUAGE_VAR_NAMES: >-
             validate_editorconfig
+            validate_json_prettier
             validate_markdown
             validate_openapi
             validate_python_black
@@ -129,7 +138,9 @@ jobs:
             validate_python_isort
             validate_python_mypy
             validate_sqlfluff
+            validate_yaml_prettier
           validate_editorconfig: ${{ inputs.validate_editorconfig }}
+          validate_json_prettier: ${{ inputs.validate_json_prettier }}
           validate_markdown: ${{ inputs.validate_markdown }}
           validate_openapi: ${{ inputs.validate_openapi }}
           validate_python_black: ${{ inputs.validate_python_black }}
@@ -137,6 +148,7 @@ jobs:
           validate_python_isort: ${{ inputs.validate_python_isort }}
           validate_python_mypy: ${{ inputs.validate_python_mypy }}
           validate_sqlfluff: ${{ inputs.validate_sql_sqlfluff }}
+          validate_yaml_prettier: ${{ inputs.validate_yaml_prettier }}
 
       - name: Lint
         uses: super-linter/super-linter/slim@v7.3.0
