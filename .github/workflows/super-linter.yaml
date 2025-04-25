@@ -62,6 +62,10 @@ on:
         required: false
         default: false
 
+      editorconfig_file_name:
+        type: string
+        required: false
+        default: .ecrc
       markdown_config_file:
         type: string
         required: false
@@ -70,6 +74,18 @@ on:
         type: string
         required: false
         default: .black.cfg.toml
+      python_flake8_config_file:
+        type: string
+        required: false
+        default: .flake8
+      python_isort_config_file:
+        type: string
+        required: false
+        default: .isort.cfg
+      python_mypy_config_file:
+        type: string
+        required: false
+        default: mypy.ini
       sql_sqlfluff_config_file:
         type: string
         required: false
@@ -101,7 +117,7 @@ jobs:
           done
 
           if [ "$validate_editorconfig" == 'true' ]; then
-            echo "EDITORCONFIG_FILE_NAME=.ecrc" >> "$GITHUB_ENV"
+            echo "EDITORCONFIG_FILE_NAME=${{ inputs.editorconfig_file_name }}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_markdown" == 'true' ]; then
@@ -113,15 +129,15 @@ jobs:
           fi
 
           if [ "$validate_python_flake8" == 'true' ]; then
-            echo "PYTHON_FLAKE8_CONFIG_FILE=.flake8" >> "$GITHUB_ENV"
+            echo "PYTHON_FLAKE8_CONFIG_FILE=${{ inputs.python_flake8_config_file }}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_python_isort" == 'true' ]; then
-            echo "PYTHON_ISORT_CONFIG_FILE=.isort.cfg" >> "$GITHUB_ENV"
+            echo "PYTHON_ISORT_CONFIG_FILE=${{ inputs.python_isort_config_file }}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_python_mypy" == 'true' ]; then
-            echo "PYTHON_MYPY_CONFIG_FILE=mypy.ini" >> "$GITHUB_ENV"
+            echo "PYTHON_MYPY_CONFIG_FILE=${{ inputs.python_mypy_config_file }}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_sqlfluff" == 'true' ]; then
