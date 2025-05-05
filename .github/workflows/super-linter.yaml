@@ -69,7 +69,7 @@ on:
       editorconfig_file_name:
         type: string
         required: false
-        default: .ecrc
+        default: .editorconfig-checker.json
       markdown_config_file:
         type: string
         required: false
