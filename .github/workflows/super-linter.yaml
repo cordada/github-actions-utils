@@ -20,6 +20,10 @@ on:
         required: false
         default: true
         description: When `true`, validate all files; when `false`, only new or edited files.
+      filter_regex_exclude:
+        type: string
+        required: false
+        description: Regular expression defining which files will be excluded from linting.
 
       validate_editorconfig:
         type: boolean
@@ -172,4 +176,5 @@ jobs:
           DEFAULT_BRANCH: ${{ inputs.default_git_branch }}
           LINTER_RULES_PATH: /
           VALIDATE_ALL_CODEBASE: ${{ inputs.validate_all_codebase }}
+          FILTER_REGEX_EXCLUDE: ${{ inputs.filter_regex_exclude }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
