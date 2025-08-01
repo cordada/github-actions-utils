@@ -171,7 +171,7 @@ jobs:
           validate_yaml_prettier: ${{ inputs.validate_yaml_prettier }}
 
       - name: Lint
-        uses: super-linter/super-linter/slim@v7.4.0
+        uses: super-linter/super-linter/slim@12150456a73e248bdc94d0794898f94e23127c88 # v7.4.0
         env:
           DEFAULT_BRANCH: ${{ inputs.default_git_branch }}
           LINTER_RULES_PATH: /
