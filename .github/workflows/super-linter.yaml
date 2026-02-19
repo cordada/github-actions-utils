@@ -107,7 +107,7 @@ jobs:
 
     steps:
       - name: Check Out VCS Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           # Full git history is needed to get a proper list of changed files within `super-linter`.
           fetch-depth: 0
@@ -121,31 +121,31 @@ jobs:
           done
 
           if [ "$validate_editorconfig" == 'true' ]; then
-            echo "EDITORCONFIG_FILE_NAME=${{ inputs.editorconfig_file_name }}" >> "$GITHUB_ENV"
+            echo "EDITORCONFIG_FILE_NAME=${editorconfig_file_name}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_markdown" == 'true' ]; then
-            echo "MARKDOWN_CONFIG_FILE=${{ inputs.markdown_config_file }}" >> "$GITHUB_ENV"
+            echo "MARKDOWN_CONFIG_FILE=${markdown_config_file}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_python_black" == 'true' ]; then
-            echo "PYTHON_BLACK_CONFIG_FILE=${{ inputs.python_black_config_file }}" >> "$GITHUB_ENV"
+            echo "PYTHON_BLACK_CONFIG_FILE=${python_black_config_file}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_python_flake8" == 'true' ]; then
-            echo "PYTHON_FLAKE8_CONFIG_FILE=${{ inputs.python_flake8_config_file }}" >> "$GITHUB_ENV"
+            echo "PYTHON_FLAKE8_CONFIG_FILE=${python_flake8_config_file}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_python_isort" == 'true' ]; then
-            echo "PYTHON_ISORT_CONFIG_FILE=${{ inputs.python_isort_config_file }}" >> "$GITHUB_ENV"
+            echo "PYTHON_ISORT_CONFIG_FILE=${python_isort_config_file}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_python_mypy" == 'true' ]; then
-            echo "PYTHON_MYPY_CONFIG_FILE=${{ inputs.python_mypy_config_file }}" >> "$GITHUB_ENV"
+            echo "PYTHON_MYPY_CONFIG_FILE=${python_mypy_config_file}" >> "$GITHUB_ENV"
           fi
 
           if [ "$validate_sqlfluff" == 'true' ]; then
-            echo "SQLFLUFF_CONFIG_FILE=${{ inputs.sql_sqlfluff_config_file }}" >> "$GITHUB_ENV"
+            echo "SQLFLUFF_CONFIG_FILE=${sql_sqlfluff_config_file}" >> "$GITHUB_ENV"
           fi
         env:
           LANGUAGE_VAR_NAMES: >-
@@ -159,6 +159,13 @@ jobs:
             validate_python_mypy
             validate_sqlfluff
             validate_yaml_prettier
+          editorconfig_file_name: ${{ inputs.editorconfig_file_name }}
+          markdown_config_file: ${{ inputs.markdown_config_file }}
+          python_black_config_file: ${{ inputs.python_black_config_file }}
+          python_flake8_config_file: ${{ inputs.python_flake8_config_file }}
+          python_isort_config_file: ${{ inputs.python_isort_config_file }}
+          python_mypy_config_file: ${{ inputs.python_mypy_config_file }}
+          sql_sqlfluff_config_file: ${{ inputs.sql_sqlfluff_config_file }}
           validate_editorconfig: ${{ inputs.validate_editorconfig }}
           validate_json_prettier: ${{ inputs.validate_json_prettier }}
           validate_markdown: ${{ inputs.validate_markdown }}
@@ -171,7 +178,7 @@ jobs:
           validate_yaml_prettier: ${{ inputs.validate_yaml_prettier }}
 
       - name: Lint
-        uses: super-linter/super-linter/slim@v7.4.0
+        uses: super-linter/super-linter/slim@61abc07d755095a68f4987d1c2c3d1d64408f1f9 # v8.5.0
         env:
           DEFAULT_BRANCH: ${{ inputs.default_git_branch }}
           LINTER_RULES_PATH: /

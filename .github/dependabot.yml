@@ -12,13 +12,10 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
-    groups:
-      github-actions-production:
-        dependency-type: production
     schedule:
       interval: monthly
     commit-message:
-      prefix: "chore:"
+      prefix: "chore(deps):"
     labels:
       - dependencies
     open-pull-requests-limit: 5
