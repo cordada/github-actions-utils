@@ -95,17 +95,19 @@ on:
         required: false
         default: .sqlfluff
 
-permissions:
-  contents: read
-  statuses: write
-  checks: write
-  issues: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-22.04
+
+    permissions:
+      contents: read
+      statuses: write
+      checks: write
+      issues: write
+      pull-requests: write
 
     steps:
       - name: Check Out VCS Repository
