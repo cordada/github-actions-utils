@@ -69,7 +69,8 @@ jobs:
 
       - name: Lint Git Commit Messages
         run: |
-          npm exec -- commitlint --from "$VCS_REF_FROM" --to "$VCS_REF_TO"
+          npm exec -- commitlint --from "$VCS_REF_FROM" --to "$VCS_REF_TO" \
+            --git-log-args '--no-merges'
         env:
           VCS_REF_FROM: ${{ inputs.vcs_ref_from }}
           VCS_REF_TO: ${{ inputs.vcs_ref_to }}
