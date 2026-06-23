@@ -107,7 +107,7 @@ jobs:
 
     steps:
       - name: Check Out VCS Repository
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.0
         with:
           # Full git history is needed to get a proper list of changed files within `super-linter`.
           fetch-depth: 0
