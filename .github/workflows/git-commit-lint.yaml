@@ -50,7 +50,7 @@ jobs:
           node-version: "lts/*"
 
       - name: Restoring/Saving Cache
-        uses: actions/cache@v6.0.0
+        uses: actions/cache@v6.1.0
         with:
           path: node_modules
           key: js-v2-deps-${{ runner.os }}-${{ steps.set_up_nodejs.outputs.node-version }}-${{ env.COMMITLINT_CLI_VERSION }}-${{ env.COMMITLINT_CONFIG_CORDADA_VERSION }}
