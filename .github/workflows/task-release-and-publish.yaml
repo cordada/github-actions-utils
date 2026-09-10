@@ -1,0 +1,93 @@
+# GitHub Actions Workflow for 'Release and Publish' Task
+#
+# Once a release pull request has been merged into the staging VCS reference, it creates a
+# publication VCS branch and opens a draft GitHub pull request that publishes the release.
+
+name: "Task: Release and Publish"
+
+on:
+  workflow_call:
+    inputs:
+      release_vcs_ref:
+        type: string
+        required: false
+        default: refs/heads/master
+        description: VCS Reference the Publication Pull Request Will Be Merged Into
+      github_pull_request_labels:
+        type: string
+        required: false
+        default: |-
+          task
+          kind: publish
+        description: Labels of the GitHub Pull Request, One per Line
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-22.04
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      CREATE_RELEASE_VCS_REVISION_ID: ${{ github.sha }} # Merge commit in base branch.
+      PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL: ${{ github.event.pull_request.html_url }}
+      PREPARE_RELEASE_GITHUB_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+      PREPARE_RELEASE_GITHUB_VCS_REF: ${{ github.event.pull_request.head.ref }}
+      RELEASE_ASSIGNEE: ${{ github.event.pull_request.assignee.login }}
+      RELEASE_VCS_REF: ${{ inputs.release_vcs_ref }}
+
+    steps:
+      - name: Check Out VCS Repository
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.CREATE_RELEASE_VCS_REVISION_ID }}
+
+      - name: Prepare Git
+        run: |
+          echo 'Adding Git aliases…'
+          git config alias.publish \
+            'push --set-upstream origin HEAD'
+
+      - name: Prepare Pull Request for Publication
+        run: |
+          create_release_vcs_branch_name="${PREPARE_RELEASE_GITHUB_VCS_REF:?}"
+          create_release_vcs_branch_name="${create_release_vcs_branch_name/release/publish}"
+          echo "Creating release creation VCS branch '$create_release_vcs_branch_name'…"
+          git checkout -b "${create_release_vcs_branch_name:?}" --
+          git publish --verbose
+
+          create_release_vcs_ref="refs/heads/${create_release_vcs_branch_name:?}"
+          echo "CREATE_RELEASE_VCS_REF=${create_release_vcs_ref:?}" >> "$GITHUB_ENV"
+
+          create_release_github_pull_request_title="${PREPARE_RELEASE_GITHUB_PULL_REQUEST_TITLE:?}"
+          create_release_github_pull_request_title="publish ${create_release_github_pull_request_title,,}"
+          create_release_github_pull_request_title="${create_release_github_pull_request_title@u}"
+          echo "CREATE_RELEASE_GITHUB_PULL_REQUEST_TITLE=${create_release_github_pull_request_title:?}" >> "$GITHUB_ENV"
+
+          create_release_github_pull_request_description="Ref: ${PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL:?}"
+          echo "CREATE_RELEASE_GITHUB_PULL_REQUEST_DESCRIPTION=${create_release_github_pull_request_description:?}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Pull Request for Publication
+        run: |
+          label_args=()
+          while IFS= read -r label; do
+            if [ -n "$label" ]; then
+              label_args+=(--label "$label")
+            fi
+          done <<< "$GITHUB_PULL_REQUEST_LABELS"
+
+          gh pr create \
+            --base "$RELEASE_VCS_REF" \
+            --head "$CREATE_RELEASE_VCS_REF" \
+            --draft \
+            --title "$CREATE_RELEASE_GITHUB_PULL_REQUEST_TITLE" \
+            --body "$CREATE_RELEASE_GITHUB_PULL_REQUEST_DESCRIPTION" \
+            --assignee "$RELEASE_ASSIGNEE" \
+            "${label_args[@]}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
