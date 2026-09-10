@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Check Out VCS Repository
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.RELEASE_VCS_REF }}
           fetch-depth: 0 # Full Git history is needed to get a proper list of changes.
