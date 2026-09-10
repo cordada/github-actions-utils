@@ -1,0 +1,176 @@
+# GitHub Actions Workflow for 'Release and Deploy to Production' Task
+#
+# It creates a release VCS branch with the changes that are not yet in the production VCS reference,
+# opens a draft GitHub pull request for it, and comments a release and deployment checklist on that
+# pull request. When there is nothing to release, it ends quietly.
+
+name: "Task: Release and Deploy to Production"
+
+on:
+  workflow_call:
+    inputs:
+      production_vcs_ref:
+        type: string
+        required: false
+        default: refs/heads/master
+        description: VCS Reference of Production Deployment Environment
+      release_vcs_ref:
+        type: string
+        required: false
+        default: ${{ github.ref }}
+        description: VCS Reference Whose Changes Will Be Released
+      github_pull_request_labels:
+        type: string
+        required: false
+        default: |-
+          task
+          kind: release
+          kind: deploy
+        description: Labels of the GitHub Pull Request, One per Line
+
+      pre_deployment_checklist_items:
+        type: string
+        required: false
+        description: >-
+          Repository-specific items of the pre-deployment checklist, in Markdown. They are added
+          after the items that are common to every repository.
+      post_deployment_checklist_items:
+        type: string
+        required: false
+        description: >-
+          Repository-specific items of the post-deployment checklist, in Markdown. They are added
+          before the items that are common to every repository.
+
+permissions: {}
+
+jobs:
+  main:
+    name: Main
+    runs-on: ubuntu-22.04
+
+    env:
+      PRODUCTION_VCS_REF: ${{ inputs.production_vcs_ref }}
+      RELEASE_VCS_REF: ${{ inputs.release_vcs_ref }}
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check Out VCS Repository
+        uses: actions/checkout@v7.0.0
+        with:
+          ref: ${{ env.RELEASE_VCS_REF }}
+          fetch-depth: 0 # Full Git history is needed to get a proper list of changes.
+
+      - name: Prepare Git
+        run: |
+          echo 'Adding Git aliases…'
+          git config alias.publish \
+            'push --set-upstream origin HEAD'
+          git config alias.lg-github-pr-summary \
+            '!f() { git log --date=short --reverse --merges --grep="^Merge pull request #[[:digit:]]* from " --grep=" (#[[:digit:]]*)$" --pretty="tformat:- (%C(auto,red)<S>%s</S>%C(reset), %C(auto,green)%ad%C(reset)) %b" "$@" | grep -E "^- \(<S>.*</S>, .*\)" | sed -E -e "s|<S>Merge pull request (#[0-9]+) from .+</S>|PR \1|" -e "s|\(<S>(.+) \((#[0-9]+)\)</S>, ([0-9-]+)\).*$|(PR \2, \3) \1|"; }; f'
+
+          echo 'Listing VCS branches…'
+          git branch --verbose
+
+          echo "Fetching production VCS reference '$PRODUCTION_VCS_REF'…"
+          git fetch --verbose origin "$PRODUCTION_VCS_REF":"$PRODUCTION_VCS_REF"
+
+          # This can be useful for troubleshooting Git:
+          # git checkout "$RELEASE_VCS_REF" --; git symbolic-ref HEAD "$RELEASE_VCS_REF"
+
+      - name: Check for Changes to Release
+        id: check_changes
+        run: |
+          echo "Counting commits of '$RELEASE_VCS_REF' that are not in '$PRODUCTION_VCS_REF'…"
+          change_count="$(git rev-list --count "${PRODUCTION_VCS_REF}..${RELEASE_VCS_REF}" --)"
+
+          if [ "${change_count:?}" -gt 0 ]; then
+            echo "There are $change_count changes to release."
+            echo 'has_changes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'There is nothing to release. The remaining steps will be skipped.'
+            echo 'has_changes=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare Release
+        if: ${{ steps.check_changes.outputs.has_changes == 'true' }}
+        run: |
+          release_vcs_branch_name="release/$(date -u +'%Y-%m-%dT%H%MZ')"
+          echo "Creating release VCS branch '$release_vcs_branch_name'…"
+          git checkout -b "${release_vcs_branch_name:?}" --
+          git publish --verbose
+
+          RELEASE_VCS_REF="refs/heads/${release_vcs_branch_name:?}"
+          echo "RELEASE_VCS_REF=${RELEASE_VCS_REF:?}" >> "$GITHUB_ENV"
+          echo "Release VCS reference is now '$RELEASE_VCS_REF'."
+
+      - name: Generate Changelog
+        id: generate_changelog
+        if: ${{ steps.check_changes.outputs.has_changes == 'true' }}
+        run: |
+          changelog_file_path="${{ runner.temp }}/CHANGELOG.md"
+
+          echo "## Changes
+
+          $(git lg-github-pr-summary "${PRODUCTION_VCS_REF}..${RELEASE_VCS_REF}" --)
+          " > "$changelog_file_path"
+
+          echo "changelog_file_path=${changelog_file_path:?}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Pull Request
+        if: ${{ steps.check_changes.outputs.has_changes == 'true' }}
+        run: |
+          label_args=()
+          while IFS= read -r label; do
+            if [ -n "$label" ]; then
+              label_args+=(--label "$label")
+            fi
+          done <<< "$GITHUB_PULL_REQUEST_LABELS"
+
+          gh pr create \
+            --base "$PRODUCTION_VCS_REF" \
+            --head "$RELEASE_VCS_REF" \
+            --draft \
+            --title 'Release and deploy to production' \
+            --body-file "$CHANGELOG_FILE_PATH" \
+            --assignee "$RELEASE_ASSIGNEE" \
+            "${label_args[@]}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ASSIGNEE: ${{ github.actor }}
+          CHANGELOG_FILE_PATH: ${{ steps.generate_changelog.outputs.changelog_file_path }}
+          GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
+
+      - name: Create Checklist
+        if: ${{ steps.check_changes.outputs.has_changes == 'true' }}
+        run: |
+          checklist_file_path="${{ runner.temp }}/RELEASE_AND_DEPLOYMENT_CHECKLIST.md"
+
+          # The here-document is unquoted so that the checklist item variables are expanded. Their
+          # values are only substituted, never evaluated, so they cannot execute commands.
+          cat > "$checklist_file_path" <<__EOF__
+          > [!TIP]
+          > 📎 It looks like you are trying to release and deploy \
+          to production 🚀. Have you considered the following?
+
+          # Release & Deployment Checklist
+
+          ## Pre-Deployment Checklist
+
+          - [ ] Are there any **errors** 🚨 affecting the **staging** deployment environment \
+                that would break the **production** environment 🔥?
+          ${PRE_DEPLOYMENT_CHECKLIST_ITEMS}
+
+          ## Post-Deployment Checklist
+
+          ${POST_DEPLOYMENT_CHECKLIST_ITEMS}
+          - [ ] Deployment finished successfully.
+          __EOF__
+
+          gh pr comment --body-file "$checklist_file_path"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRE_DEPLOYMENT_CHECKLIST_ITEMS: ${{ inputs.pre_deployment_checklist_items }}
+          POST_DEPLOYMENT_CHECKLIST_ITEMS: ${{ inputs.post_deployment_checklist_items }}
