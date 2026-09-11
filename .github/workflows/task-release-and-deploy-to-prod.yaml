@@ -91,6 +91,7 @@ jobs:
         run: |
           echo "Counting commits of '$RELEASE_VCS_REF' that are not in '$PRODUCTION_VCS_REF'…"
           change_count="$(git rev-list --count "${PRODUCTION_VCS_REF}..${RELEASE_VCS_REF}" --)"
+          echo "change_count=${change_count:?}" >> "$GITHUB_OUTPUT"
 
           if [ "${change_count:?}" -gt 0 ]; then
             echo "There are $change_count changes to release."
@@ -98,6 +99,15 @@ jobs:
           else
             echo 'There is nothing to release. The remaining steps will be skipped.'
             echo 'has_changes=false' >> "$GITHUB_OUTPUT"
+
+            {
+              echo '# Release and Deploy to Production'
+              echo
+              echo 'Nothing to release.'
+              echo
+              echo "- **From:** \`$RELEASE_VCS_REF\`"
+              echo "- **Into:** \`$PRODUCTION_VCS_REF\`"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Prepare Release
@@ -148,8 +158,19 @@ jobs:
           )"
 
           echo "url=${github_pull_request_url:?}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo '# Release and Deploy to Production'
+            echo
+            echo "$github_pull_request_url"
+            echo
+            echo "- **Changes:** $CHANGE_COUNT"
+            echo "- **From:** \`$RELEASE_VCS_REF\`"
+            echo "- **Into:** \`$PRODUCTION_VCS_REF\`"
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANGE_COUNT: ${{ steps.check_changes.outputs.change_count }}
           RELEASE_ASSIGNEE: ${{ github.actor }}
           CHANGELOG_FILE_PATH: ${{ steps.generate_changelog.outputs.changelog_file_path }}
           GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
@@ -216,19 +237,32 @@ jobs:
             reviewers+=("$commit_author")
           done <<< "$commit_authors"
 
-          if [ "${#reviewers[@]}" -eq 0 ]; then
-            echo 'There is nobody to request a review from.'
-            exit 0
-          fi
-
           # A review is requested from one user at a time, because GitHub rejects the whole request
           # when a single one of the users cannot be a reviewer, for instance because they no longer
           # have access to the VCS repository. A review that cannot be requested is not fatal.
+          requested_reviewers=()
+          rejected_reviewers=()
           for reviewer in "${reviewers[@]}"; do
             echo "Requesting a review from '$reviewer'…"
-            gh pr edit "$GITHUB_PULL_REQUEST_URL" --add-reviewer "$reviewer" \
-              || echo "::warning::Could not request a review from '$reviewer'."
+            if gh pr edit "$GITHUB_PULL_REQUEST_URL" --add-reviewer "$reviewer"; then
+              requested_reviewers+=("@$reviewer")
+            else
+              echo "::warning::Could not request a review from '$reviewer'."
+              rejected_reviewers+=("@$reviewer")
+            fi
           done
+
+          {
+            if [ "${#requested_reviewers[@]}" -gt 0 ]; then
+              echo "- **Reviewers:** ${requested_reviewers[*]}"
+            else
+              echo '- **Reviewers:** nobody'
+            fi
+
+            if [ "${#rejected_reviewers[@]}" -gt 0 ]; then
+              echo "- **Reviewers GitHub rejected:** ${rejected_reviewers[*]}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
