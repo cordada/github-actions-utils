@@ -1,8 +1,7 @@
 # GitHub Actions Workflow for 'Release and Deploy to Production' Task
 #
-# It creates a release VCS branch with the changes that are not yet in the production VCS reference,
-# opens a draft GitHub pull request for it, and comments a release and deployment checklist on that
-# pull request. When there is nothing to release, it ends quietly.
+# It opens a GitHub pull request to create a release and deploy it to production. It ends quietly
+# when there is nothing to release.
 
 name: "Task: Release and Deploy to Production"
 
@@ -27,6 +26,13 @@ on:
           kind: release
           kind: deploy
         description: Labels of the GitHub Pull Request, One per Line
+      request_reviews_from_change_authors:
+        type: boolean
+        required: false
+        default: true
+        description: >-
+          Whether to request a review of the GitHub pull request from every GitHub user who
+          authored one of the commits included in it.
 
       pre_deployment_checklist_items:
         type: string
@@ -120,6 +126,7 @@ jobs:
           echo "changelog_file_path=${changelog_file_path:?}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Pull Request
+        id: create_github_pull_request
         if: ${{ steps.check_changes.outputs.has_changes == 'true' }}
         run: |
           label_args=()
@@ -129,14 +136,18 @@ jobs:
             fi
           done <<< "$GITHUB_PULL_REQUEST_LABELS"
 
-          gh pr create \
-            --base "$PRODUCTION_VCS_REF" \
-            --head "$RELEASE_VCS_REF" \
-            --draft \
-            --title 'Release and deploy to production' \
-            --body-file "$CHANGELOG_FILE_PATH" \
-            --assignee "$RELEASE_ASSIGNEE" \
-            "${label_args[@]}"
+          github_pull_request_url="$(
+            gh pr create \
+              --base "$PRODUCTION_VCS_REF" \
+              --head "$RELEASE_VCS_REF" \
+              --draft \
+              --title 'Release and deploy to production' \
+              --body-file "$CHANGELOG_FILE_PATH" \
+              --assignee "$RELEASE_ASSIGNEE" \
+              "${label_args[@]}"
+          )"
+
+          echo "url=${github_pull_request_url:?}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ASSIGNEE: ${{ github.actor }}
@@ -174,3 +185,50 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PRE_DEPLOYMENT_CHECKLIST_ITEMS: ${{ inputs.pre_deployment_checklist_items }}
           POST_DEPLOYMENT_CHECKLIST_ITEMS: ${{ inputs.post_deployment_checklist_items }}
+
+      - name: Request Reviews from Change Authors
+        if: >-
+          ${{ steps.check_changes.outputs.has_changes == 'true'
+          && inputs.request_reviews_from_change_authors }}
+        run: |
+          github_pull_request_number="$(
+            gh pr view "$GITHUB_PULL_REQUEST_URL" --json number --jq '.number'
+          )"
+
+          # The author of a commit is read from the GitHub API rather than from the Git history,
+          # because only GitHub can resolve the email address of a commit to a GitHub user. The
+          # commits are paginated, as a release easily exceeds the size of a single page.
+          echo "Getting the authors of the commits of pull request #$github_pull_request_number…"
+          commit_authors="$(
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY:?}/pulls/${github_pull_request_number:?}/commits" \
+              --jq '.[].author.login // empty' \
+              | sort -u
+          )"
+
+          reviewers=()
+          while IFS= read -r commit_author; do
+            # A bot cannot be a reviewer, and neither can the pull request's own author, which is
+            # the bot of GitHub Actions because the pull request is created with its token.
+            case "$commit_author" in
+              '' | *'[bot]') continue ;;
+            esac
+            reviewers+=("$commit_author")
+          done <<< "$commit_authors"
+
+          if [ "${#reviewers[@]}" -eq 0 ]; then
+            echo 'There is nobody to request a review from.'
+            exit 0
+          fi
+
+          # A review is requested from one user at a time, because GitHub rejects the whole request
+          # when a single one of the users cannot be a reviewer, for instance because they no longer
+          # have access to the VCS repository. A review that cannot be requested is not fatal.
+          for reviewer in "${reviewers[@]}"; do
+            echo "Requesting a review from '$reviewer'…"
+            gh pr edit "$GITHUB_PULL_REQUEST_URL" --add-reviewer "$reviewer" \
+              || echo "::warning::Could not request a review from '$reviewer'."
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
