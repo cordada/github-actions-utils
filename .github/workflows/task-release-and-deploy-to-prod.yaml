@@ -39,13 +39,15 @@ on:
         required: false
         description: >-
           Repository-specific items of the pre-deployment checklist, in Markdown. They are added
-          after the items that are common to every repository.
+          after the items that are common to every repository. An item must not be hard-wrapped,
+          because GitHub renders every newline of a comment as a line break.
       post_deployment_checklist_items:
         type: string
         required: false
         description: >-
           Repository-specific items of the post-deployment checklist, in Markdown. They are added
-          before the items that are common to every repository.
+          before the items that are common to every repository. An item must not be hard-wrapped,
+          because GitHub renders every newline of a comment as a line break.
 
 permissions: {}
 
@@ -172,7 +174,7 @@ jobs:
           ## Pre-Deployment Checklist
 
           - [ ] Are there any **errors** 🚨 affecting the **staging** deployment environment \
-                that would break the **production** environment 🔥?
+          that would break the **production** environment 🔥?
           ${PRE_DEPLOYMENT_CHECKLIST_ITEMS}
 
           ## Post-Deployment Checklist
