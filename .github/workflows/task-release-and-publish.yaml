@@ -100,21 +100,12 @@ jobs:
           )"
 
           echo "url=${github_pull_request_url:?}" >> "$GITHUB_OUTPUT"
-
-          {
-            echo '# Release and Publish'
-            echo
-            echo "$github_pull_request_url"
-            echo
-            echo "- **From:** \`$CREATE_RELEASE_VCS_REF\`"
-            echo "- **Into:** \`$RELEASE_VCS_REF\`"
-            echo "- **Release:** $PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL"
-          } >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
 
       - name: Request Reviews from Change Authors
+        id: request_reviews
         if: ${{ inputs.request_reviews_from_change_authors }}
         run: |
           github_pull_request_number="$(
@@ -158,16 +149,37 @@ jobs:
           done
 
           {
-            if [ "${#requested_reviewers[@]}" -gt 0 ]; then
-              echo "- **Reviewers:** ${requested_reviewers[*]}"
-            else
-              echo '- **Reviewers:** nobody'
-            fi
-
-            if [ "${#rejected_reviewers[@]}" -gt 0 ]; then
-              echo "- **Reviewers GitHub rejected:** ${rejected_reviewers[*]}"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "requested_reviewers=${requested_reviewers[*]}"
+            echo "rejected_reviewers=${rejected_reviewers[*]}"
+          } >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
+
+      # No other step may write to $GITHUB_STEP_SUMMARY: GitHub renders each step's summary as a
+      # Markdown document of its own and joins them with a blank line, which splits the list below.
+      - name: Write Job Summary
+        if: ${{ !cancelled() && steps.create_github_pull_request.outcome == 'success' }}
+        run: |
+          {
+            echo '# Release and Publish'
+            echo
+            echo "$GITHUB_PULL_REQUEST_URL"
+            echo
+            echo "- **From:** \`$CREATE_RELEASE_VCS_REF\`"
+            echo "- **Into:** \`$RELEASE_VCS_REF\`"
+            echo "- **Release:** $PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL"
+
+            if [ "$REQUEST_REVIEWS_FROM_CHANGE_AUTHORS" = 'true' ]; then
+              echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-nobody}"
+            fi
+
+            if [ -n "$REJECTED_REVIEWERS" ]; then
+              echo "- **Reviewers GitHub rejected:** $REJECTED_REVIEWERS"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
+          REQUEST_REVIEWS_FROM_CHANGE_AUTHORS: ${{ inputs.request_reviews_from_change_authors }}
+          REQUESTED_REVIEWERS: ${{ steps.request_reviews.outputs.requested_reviewers }}
+          REJECTED_REVIEWERS: ${{ steps.request_reviews.outputs.rejected_reviewers }}
