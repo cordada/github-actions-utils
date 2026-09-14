@@ -39,13 +39,15 @@ on:
         required: false
         description: >-
           Repository-specific items of the pre-deployment checklist, in Markdown. They are added
-          after the items that are common to every repository.
+          after the items that are common to every repository. An item must not be hard-wrapped,
+          because GitHub renders every newline of a comment as a line break.
       post_deployment_checklist_items:
         type: string
         required: false
         description: >-
           Repository-specific items of the post-deployment checklist, in Markdown. They are added
-          before the items that are common to every repository.
+          before the items that are common to every repository. An item must not be hard-wrapped,
+          because GitHub renders every newline of a comment as a line break.
 
 permissions: {}
 
@@ -99,15 +101,6 @@ jobs:
           else
             echo 'There is nothing to release. The remaining steps will be skipped.'
             echo 'has_changes=false' >> "$GITHUB_OUTPUT"
-
-            {
-              echo '# Release and Deploy to Production'
-              echo
-              echo 'Nothing to release.'
-              echo
-              echo "- **From:** \`$RELEASE_VCS_REF\`"
-              echo "- **Into:** \`$PRODUCTION_VCS_REF\`"
-            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Prepare Release
@@ -158,19 +151,8 @@ jobs:
           )"
 
           echo "url=${github_pull_request_url:?}" >> "$GITHUB_OUTPUT"
-
-          {
-            echo '# Release and Deploy to Production'
-            echo
-            echo "$github_pull_request_url"
-            echo
-            echo "- **Changes:** $CHANGE_COUNT"
-            echo "- **From:** \`$RELEASE_VCS_REF\`"
-            echo "- **Into:** \`$PRODUCTION_VCS_REF\`"
-          } >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ github.token }}
-          CHANGE_COUNT: ${{ steps.check_changes.outputs.change_count }}
           RELEASE_ASSIGNEE: ${{ github.actor }}
           CHANGELOG_FILE_PATH: ${{ steps.generate_changelog.outputs.changelog_file_path }}
           GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
@@ -192,7 +174,7 @@ jobs:
           ## Pre-Deployment Checklist
 
           - [ ] Are there any **errors** 🚨 affecting the **staging** deployment environment \
-                that would break the **production** environment 🔥?
+          that would break the **production** environment 🔥?
           ${PRE_DEPLOYMENT_CHECKLIST_ITEMS}
 
           ## Post-Deployment Checklist
@@ -208,6 +190,7 @@ jobs:
           POST_DEPLOYMENT_CHECKLIST_ITEMS: ${{ inputs.post_deployment_checklist_items }}
 
       - name: Request Reviews from Change Authors
+        id: request_reviews
         if: >-
           ${{ steps.check_changes.outputs.has_changes == 'true'
           && inputs.request_reviews_from_change_authors }}
@@ -253,16 +236,50 @@ jobs:
           done
 
           {
-            if [ "${#requested_reviewers[@]}" -gt 0 ]; then
-              echo "- **Reviewers:** ${requested_reviewers[*]}"
-            else
-              echo '- **Reviewers:** nobody'
-            fi
-
-            if [ "${#rejected_reviewers[@]}" -gt 0 ]; then
-              echo "- **Reviewers GitHub rejected:** ${rejected_reviewers[*]}"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "requested_reviewers=${requested_reviewers[*]}"
+            echo "rejected_reviewers=${rejected_reviewers[*]}"
+          } >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
+
+      # No other step may write to $GITHUB_STEP_SUMMARY: GitHub renders each step's summary as a
+      # Markdown document of its own and joins them with a blank line, which splits the list below.
+      - name: Write Job Summary
+        if: ${{ !cancelled() && steps.check_changes.outcome == 'success' }}
+        run: |
+          {
+            echo '# Release and Deploy to Production'
+            echo
+
+            if [ "$HAS_CHANGES" != 'true' ]; then
+              echo 'Nothing to release.'
+              echo
+              echo "- **From:** \`$RELEASE_VCS_REF\`"
+              echo "- **Into:** \`$PRODUCTION_VCS_REF\`"
+            else
+              if [ -n "$GITHUB_PULL_REQUEST_URL" ]; then
+                echo "$GITHUB_PULL_REQUEST_URL"
+                echo
+              fi
+
+              echo "- **Changes:** $CHANGE_COUNT"
+              echo "- **From:** \`$RELEASE_VCS_REF\`"
+              echo "- **Into:** \`$PRODUCTION_VCS_REF\`"
+
+              if [ "$REQUEST_REVIEWS_FROM_CHANGE_AUTHORS" = 'true' ]; then
+                echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-Nobody}"
+              fi
+
+              if [ -n "$REJECTED_REVIEWERS" ]; then
+                echo "- **Reviewers GitHub rejected:** $REJECTED_REVIEWERS"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          HAS_CHANGES: ${{ steps.check_changes.outputs.has_changes }}
+          CHANGE_COUNT: ${{ steps.check_changes.outputs.change_count }}
+          GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
+          REQUEST_REVIEWS_FROM_CHANGE_AUTHORS: ${{ inputs.request_reviews_from_change_authors }}
+          REQUESTED_REVIEWERS: ${{ steps.request_reviews.outputs.requested_reviewers }}
+          REJECTED_REVIEWERS: ${{ steps.request_reviews.outputs.rejected_reviewers }}
