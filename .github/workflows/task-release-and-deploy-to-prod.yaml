@@ -268,7 +268,7 @@ jobs:
               echo "- **Into:** \`$PRODUCTION_VCS_REF\`"
 
               if [ "$REQUEST_REVIEWS_FROM_CHANGE_AUTHORS" = 'true' ]; then
-                echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-nobody}"
+                echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-Nobody}"
               fi
 
               if [ -n "$REJECTED_REVIEWERS" ]; then

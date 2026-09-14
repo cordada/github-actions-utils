@@ -171,7 +171,7 @@ jobs:
             echo "- **Release:** $PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL"
 
             if [ "$REQUEST_REVIEWS_FROM_CHANGE_AUTHORS" = 'true' ]; then
-              echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-nobody}"
+              echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-Nobody}"
             fi
 
             if [ -n "$REJECTED_REVIEWERS" ]; then
