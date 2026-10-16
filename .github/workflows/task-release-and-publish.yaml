@@ -28,6 +28,25 @@ on:
           Whether to request a review of the GitHub pull request from every GitHub user who
           authored one of the commits included in it.
 
+      pre_publication_checklist_items:
+        type: string
+        required: false
+        description: >-
+          Repository-specific items of the pre-publication checklist, in Markdown. They are added
+          after the items that are common to every repository. An item must not be hard-wrapped,
+          because GitHub renders every newline of a comment as a line break. The checklist is
+          commented on the GitHub pull request only when this input or
+          `post_publication_checklist_items` is given.
+      post_publication_checklist_items:
+        type: string
+        required: false
+        description: >-
+          Repository-specific items of the post-publication checklist, in Markdown. They are added
+          before the items that are common to every repository. An item must not be hard-wrapped,
+          because GitHub renders every newline of a comment as a line break. The checklist is
+          commented on the GitHub pull request only when this input or
+          `pre_publication_checklist_items` is given.
+
 permissions: {}
 
 jobs:
@@ -103,6 +122,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
+
+      - name: Create Checklist
+        if: >-
+          ${{ inputs.pre_publication_checklist_items != ''
+          || inputs.post_publication_checklist_items != '' }}
+        run: |
+          checklist_file_path="${RUNNER_TEMP:?}/RELEASE_AND_PUBLICATION_CHECKLIST.md"
+
+          # The here-document is unquoted so that the checklist item variables are expanded. Their
+          # values are only substituted, never evaluated, so they cannot execute commands.
+          cat > "$checklist_file_path" <<__EOF__
+          > [!TIP]
+          > 📎 It looks like you are trying to release and publish \
+          a package 📦. Have you considered the following?
+
+          # Release & Publication Checklist
+
+          ## Pre-Publication Checklist
+
+          - [ ] Was the **version** of the package raised for the changes being published?
+          ${PRE_PUBLICATION_CHECKLIST_ITEMS}
+
+          ## Post-Publication Checklist
+
+          ${POST_PUBLICATION_CHECKLIST_ITEMS}
+          - [ ] Publication finished successfully.
+          __EOF__
+
+          gh pr comment "$GITHUB_PULL_REQUEST_URL" --body-file "$checklist_file_path"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
+          PRE_PUBLICATION_CHECKLIST_ITEMS: ${{ inputs.pre_publication_checklist_items }}
+          POST_PUBLICATION_CHECKLIST_ITEMS: ${{ inputs.post_publication_checklist_items }}
 
       - name: Request Reviews from Change Authors
         id: request_reviews
