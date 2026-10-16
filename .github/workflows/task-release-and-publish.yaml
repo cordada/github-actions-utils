@@ -1,7 +1,9 @@
 # GitHub Actions Workflow for 'Release and Publish' Task
 #
-# It opens a GitHub pull request to publish a previously created release. It must be called from a
-# merged release pull request, whose title, head VCS reference and assignee it derives its own from.
+# It opens a GitHub pull request to publish a release. Called from a merged release pull request, it
+# derives the title, head VCS reference and assignee of its own from it. Called otherwise, as from a
+# manually dispatched workflow, it publishes the VCS reference it runs on, with the changes as the
+# description, and assigns whoever started it, or ends quietly when there is nothing to publish.
 
 name: "Task: Release and Publish"
 
@@ -59,11 +61,11 @@ jobs:
       pull-requests: write
 
     env:
-      CREATE_RELEASE_VCS_REVISION_ID: ${{ github.sha }} # Merge commit in base branch.
+      CREATE_RELEASE_VCS_REVISION_ID: ${{ github.sha }} # Merge commit or head of manual run's ref.
       PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL: ${{ github.event.pull_request.html_url }}
       PREPARE_RELEASE_GITHUB_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
       PREPARE_RELEASE_GITHUB_VCS_REF: ${{ github.event.pull_request.head.ref }}
-      RELEASE_ASSIGNEE: ${{ github.event.pull_request.assignee.login }}
+      PREPARE_RELEASE_GITHUB_PULL_REQUEST_ASSIGNEE: ${{ github.event.pull_request.assignee.login }}
       RELEASE_VCS_REF: ${{ inputs.release_vcs_ref }}
 
     steps:
@@ -71,35 +73,90 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.CREATE_RELEASE_VCS_REVISION_ID }}
+          fetch-depth: ${{ github.event.pull_request && 1 || 0 }} # Full history for manual runs.
 
       - name: Prepare Git
         run: |
           echo 'Adding Git aliases…'
           git config alias.publish \
             'push --set-upstream origin HEAD'
+          git config alias.lg-github-pr-summary \
+            '!f() { git log --date=short --reverse --merges --grep="^Merge pull request #[[:digit:]]* from " --grep=" (#[[:digit:]]*)$" --pretty="tformat:- (%C(auto,red)<S>%s</S>%C(reset), %C(auto,green)%ad%C(reset)) %b" "$@" | grep -E "^- \(<S>.*</S>, .*\)" | sed -E -e "s|<S>Merge pull request (#[0-9]+) from .+</S>|PR \1|" -e "s|\(<S>(.+) \((#[0-9]+)\)</S>, ([0-9-]+)\).*$|(PR \2, \3) \1|"; }; f'
+
+      - name: Check for Changes to Publish
+        id: check_changes
+        run: |
+          # A merged release pull request always has something to publish, so it is not checked,
+          # which keeps the publication of a release independent of the history of the release VCS
+          # reference.
+          if [ -n "$PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL" ]; then
+            echo 'Called from a merged release pull request. There are changes to publish.'
+            echo 'has_changes=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Fetching release VCS reference '$RELEASE_VCS_REF'…"
+          git fetch --verbose origin "$RELEASE_VCS_REF":"$RELEASE_VCS_REF"
+
+          echo "Counting commits of '$CREATE_RELEASE_VCS_REVISION_ID' that are not in '$RELEASE_VCS_REF'…"
+          change_count="$(git rev-list --count "${RELEASE_VCS_REF}..${CREATE_RELEASE_VCS_REVISION_ID}" --)"
+          echo "change_count=${change_count:?}" >> "$GITHUB_OUTPUT"
+
+          if [ "${change_count:?}" -gt 0 ]; then
+            echo "There are $change_count changes to publish."
+            echo 'has_changes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'There is nothing to publish. The remaining steps will be skipped.'
+            echo 'has_changes=false' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Prepare Pull Request for Publication
+        if: ${{ steps.check_changes.outputs.has_changes == 'true' }}
         run: |
-          create_release_vcs_branch_name="${PREPARE_RELEASE_GITHUB_VCS_REF:?}"
-          create_release_vcs_branch_name="${create_release_vcs_branch_name/release/publish}"
+          # The values derived from the release pull request are handed to the later steps in files
+          # rather than in $GITHUB_ENV, where a newline in one of them would define a variable.
+          publication_dir_path="${RUNNER_TEMP:?}/publication"
+          mkdir -p "$publication_dir_path"
+          description_file_path="$publication_dir_path/description.md"
+
+          if [ -n "$PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL" ]; then
+            create_release_vcs_branch_name="${PREPARE_RELEASE_GITHUB_VCS_REF:?}"
+            create_release_vcs_branch_name="${create_release_vcs_branch_name/release/publish}"
+
+            create_release_github_pull_request_title="${PREPARE_RELEASE_GITHUB_PULL_REQUEST_TITLE:?}"
+            create_release_github_pull_request_title="publish ${create_release_github_pull_request_title,,}"
+            create_release_github_pull_request_title="${create_release_github_pull_request_title@u}"
+
+            printf 'Ref: %s' "${PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL:?}" > "$description_file_path"
+
+            release_assignee="$PREPARE_RELEASE_GITHUB_PULL_REQUEST_ASSIGNEE"
+          else
+            create_release_vcs_branch_name="publish/$(date -u +'%Y-%m-%dT%H%MZ')"
+            create_release_github_pull_request_title='Release and publish'
+
+            release_assignee="${GITHUB_ACTOR:?}"
+
+            echo "## Changes
+
+          $(git lg-github-pr-summary "${RELEASE_VCS_REF}..${CREATE_RELEASE_VCS_REVISION_ID}" --)
+          " > "$description_file_path"
+          fi
+
           echo "Creating release creation VCS branch '$create_release_vcs_branch_name'…"
           git checkout -b "${create_release_vcs_branch_name:?}" --
           git publish --verbose
 
           create_release_vcs_ref="refs/heads/${create_release_vcs_branch_name:?}"
-          echo "CREATE_RELEASE_VCS_REF=${create_release_vcs_ref:?}" >> "$GITHUB_ENV"
-
-          create_release_github_pull_request_title="${PREPARE_RELEASE_GITHUB_PULL_REQUEST_TITLE:?}"
-          create_release_github_pull_request_title="publish ${create_release_github_pull_request_title,,}"
-          create_release_github_pull_request_title="${create_release_github_pull_request_title@u}"
-          echo "CREATE_RELEASE_GITHUB_PULL_REQUEST_TITLE=${create_release_github_pull_request_title:?}" >> "$GITHUB_ENV"
-
-          create_release_github_pull_request_description="Ref: ${PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL:?}"
-          echo "CREATE_RELEASE_GITHUB_PULL_REQUEST_DESCRIPTION=${create_release_github_pull_request_description:?}" >> "$GITHUB_ENV"
+          printf '%s' "${create_release_vcs_ref:?}" > "$publication_dir_path/vcs-ref"
+          printf '%s' "${create_release_github_pull_request_title:?}" > "$publication_dir_path/title"
+          printf '%s' "$release_assignee" > "$publication_dir_path/assignee"
 
       - name: Create GitHub Pull Request for Publication
         id: create_github_pull_request
+        if: ${{ steps.check_changes.outputs.has_changes == 'true' }}
         run: |
+          publication_dir_path="${RUNNER_TEMP:?}/publication"
+
           label_args=()
           while IFS= read -r label; do
             if [ -n "$label" ]; then
@@ -110,11 +167,11 @@ jobs:
           github_pull_request_url="$(
             gh pr create \
               --base "$RELEASE_VCS_REF" \
-              --head "$CREATE_RELEASE_VCS_REF" \
+              --head "$(< "$publication_dir_path/vcs-ref")" \
               --draft \
-              --title "$CREATE_RELEASE_GITHUB_PULL_REQUEST_TITLE" \
-              --body "$CREATE_RELEASE_GITHUB_PULL_REQUEST_DESCRIPTION" \
-              --assignee "$RELEASE_ASSIGNEE" \
+              --title "$(< "$publication_dir_path/title")" \
+              --body-file "$publication_dir_path/description.md" \
+              --assignee "$(< "$publication_dir_path/assignee")" \
               "${label_args[@]}"
           )"
 
@@ -125,8 +182,9 @@ jobs:
 
       - name: Create Checklist
         if: >-
-          ${{ inputs.pre_publication_checklist_items != ''
-          || inputs.post_publication_checklist_items != '' }}
+          ${{ steps.check_changes.outputs.has_changes == 'true'
+          && (inputs.pre_publication_checklist_items != ''
+          || inputs.post_publication_checklist_items != '') }}
         run: |
           checklist_file_path="${RUNNER_TEMP:?}/RELEASE_AND_PUBLICATION_CHECKLIST.md"
 
@@ -159,7 +217,9 @@ jobs:
 
       - name: Request Reviews from Change Authors
         id: request_reviews
-        if: ${{ inputs.request_reviews_from_change_authors }}
+        if: >-
+          ${{ steps.check_changes.outputs.has_changes == 'true'
+          && inputs.request_reviews_from_change_authors }}
         run: |
           github_pull_request_number="$(
             gh pr view "$GITHUB_PULL_REQUEST_URL" --json number --jq '.number'
@@ -212,26 +272,47 @@ jobs:
       # No other step may write to $GITHUB_STEP_SUMMARY: GitHub renders each step's summary as a
       # Markdown document of its own and joins them with a blank line, which splits the list below.
       - name: Write Job Summary
-        if: ${{ !cancelled() && steps.create_github_pull_request.outcome == 'success' }}
+        if: >-
+          ${{ !cancelled()
+          && (steps.create_github_pull_request.outcome == 'success'
+          || steps.check_changes.outputs.has_changes == 'false') }}
         run: |
           {
             echo '# Release and Publish'
             echo
-            echo "$GITHUB_PULL_REQUEST_URL"
-            echo
-            echo "- **From:** \`$CREATE_RELEASE_VCS_REF\`"
-            echo "- **Into:** \`$RELEASE_VCS_REF\`"
-            echo "- **Release:** $PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL"
 
-            if [ "$REQUEST_REVIEWS_FROM_CHANGE_AUTHORS" = 'true' ]; then
-              echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-Nobody}"
-            fi
+            if [ "$HAS_CHANGES" != 'true' ]; then
+              echo 'Nothing to publish.'
+              echo
+              echo "- **From:** \`$CREATE_RELEASE_VCS_REVISION_ID\`"
+              echo "- **Into:** \`$RELEASE_VCS_REF\`"
+            else
+              echo "$GITHUB_PULL_REQUEST_URL"
+              echo
 
-            if [ -n "$REJECTED_REVIEWERS" ]; then
-              echo "- **Reviewers GitHub rejected:** $REJECTED_REVIEWERS"
+              if [ -n "$CHANGE_COUNT" ]; then
+                echo "- **Changes:** $CHANGE_COUNT"
+              fi
+
+              echo "- **From:** \`$(< "${RUNNER_TEMP:?}/publication/vcs-ref")\`"
+              echo "- **Into:** \`$RELEASE_VCS_REF\`"
+
+              if [ -n "$PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL" ]; then
+                echo "- **Release:** $PREPARE_RELEASE_GITHUB_PULL_REQUEST_HTML_URL"
+              fi
+
+              if [ "$REQUEST_REVIEWS_FROM_CHANGE_AUTHORS" = 'true' ]; then
+                echo "- **Reviewers:** ${REQUESTED_REVIEWERS:-Nobody}"
+              fi
+
+              if [ -n "$REJECTED_REVIEWERS" ]; then
+                echo "- **Reviewers GitHub rejected:** $REJECTED_REVIEWERS"
+              fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
         env:
+          HAS_CHANGES: ${{ steps.check_changes.outputs.has_changes }}
+          CHANGE_COUNT: ${{ steps.check_changes.outputs.change_count }}
           GITHUB_PULL_REQUEST_URL: ${{ steps.create_github_pull_request.outputs.url }}
           REQUEST_REVIEWS_FROM_CHANGE_AUTHORS: ${{ inputs.request_reviews_from_change_authors }}
           REQUESTED_REVIEWERS: ${{ steps.request_reviews.outputs.requested_reviewers }}
