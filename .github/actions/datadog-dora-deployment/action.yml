@@ -1,0 +1,164 @@
+# GitHub Action for Datadog DORA Deployment
+#
+# It sends a deployment event to Datadog DORA Metrics, for a service whose deployments Datadog does
+# not detect by itself, as it does through APM Deployment Tracking. Being a step, it can time the
+# deployment of the job that runs it.
+#
+# - Documentation: https://docs.datadoghq.com/delivery_performance/dora_metrics/setup/
+# - API: https://docs.datadoghq.com/api/latest/delivery-performance/send-a-deployment-event/
+
+name: "Datadog DORA Deployment"
+description: Send a deployment event to Datadog DORA Metrics.
+
+inputs:
+  service:
+    required: true
+    description: Name of the Deployed Service, as in the Datadog Software Catalog
+  deploy_env:
+    required: true
+    description: Deployment Environment, such as `prod` or `stg`
+  vcs_revision_id:
+    required: false
+    default: ${{ github.sha }}
+    description: VCS Revision ID (Git Commit SHA) of the Deployed Changes
+  vcs_repository_url:
+    required: false
+    default: ${{ github.server_url }}/${{ github.repository }}
+    description: VCS Repository URL
+  version:
+    required: false
+    description: >-
+      Version of the deployed service, which correlates the deployment with APM Deployment
+      Tracking. It defaults to the VCS revision ID.
+  deployment_started_at:
+    required: false
+    description: >-
+      Unix timestamp when the deployment started, in nanoseconds, milliseconds or seconds. It
+      must be given together with `deployment_finished_at`. When neither is given, the
+      deployment is timed as if it had happened while this action runs.
+  deployment_finished_at:
+    required: false
+    description: >-
+      Unix timestamp when the deployment finished, in the same unit as `deployment_started_at`.
+  team:
+    required: false
+    description: >-
+      Team owning the deployed service. When not given, Datadog takes it from the service's
+      entry in the Software Catalog.
+  custom_tags:
+    required: false
+    description: >-
+      Additional tags of the deployment event, in the form `key:value`, one per line. They are
+      added to the tags that identify the GitHub Actions workflow run.
+  datadog_site:
+    required: false
+    default: datadoghq.com
+    description: Datadog Site, such as `datadoghq.com` or `us5.datadoghq.com`
+  datadog_api_key:
+    required: true
+    description: Datadog API Key
+
+outputs:
+  deployment_id:
+    description: ID of the DORA Deployment Event in Datadog
+    value: ${{ steps.send_deployment_event.outputs.deployment_id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Send Deployment Event
+      id: send_deployment_event
+      shell: bash
+      run: |
+        if [ -z "$DEPLOYMENT_STARTED_AT" ] && [ -z "$DEPLOYMENT_FINISHED_AT" ]; then
+          echo '::notice::No deployment timestamps were given. Using those of this step.'
+          DEPLOYMENT_STARTED_AT=$(date +'%s%N')
+          sleep 0.100 # Wait because Datadog does not accept equal start and end timestamps.
+          DEPLOYMENT_FINISHED_AT=$(date +'%s%N')
+        elif [ -z "$DEPLOYMENT_STARTED_AT" ] || [ -z "$DEPLOYMENT_FINISHED_AT" ]; then
+          echo '::error::Give both deployment timestamps, or neither of them.'
+          exit 1
+        fi
+
+        # The timestamps are converted to milliseconds, because jq 1.6 converts numbers to
+        # floating point, which cannot represent a timestamp in nanoseconds exactly.
+        to_unix_timestamp_ms() {
+          case "$1" in
+            '' | *[!0-9]*) ;;
+            ??????????) echo "$(( $1 * 1000 ))"; return ;;
+            ?????????????) echo "$1"; return ;;
+            ???????????????????) echo "$(( $1 / 1000000 ))"; return ;;
+          esac
+          echo "::error::Invalid Unix timestamp (s, ms or ns): '$1'." >&2
+          return 1
+        }
+        DEPLOYMENT_STARTED_AT=$(to_unix_timestamp_ms "$DEPLOYMENT_STARTED_AT")
+        DEPLOYMENT_FINISHED_AT=$(to_unix_timestamp_ms "$DEPLOYMENT_FINISHED_AT")
+
+        # The payload is built with jq, rather than in a here-document, so that no input can
+        # break its JSON syntax.
+        request_payload_file_path="${RUNNER_TEMP:?}/datadog_dora_deployment_request.json"
+        jq --null-input \
+          --arg commit_sha "${VCS_REVISION_ID:?}" \
+          --arg custom_tags "$CUSTOM_TAGS" \
+          --arg env "${DEPLOY_ENV:?}" \
+          --arg finished_at "${DEPLOYMENT_FINISHED_AT:?}" \
+          --arg repository_url "${VCS_REPOSITORY_URL:?}" \
+          --arg service "${SERVICE:?}" \
+          --arg started_at "${DEPLOYMENT_STARTED_AT:?}" \
+          --arg team "$TEAM" \
+          --arg version "${VERSION:-$VCS_REVISION_ID}" \
+          '{
+            data: {
+              attributes: ({
+                started_at: ($started_at | tonumber),
+                finished_at: ($finished_at | tonumber),
+                git: {
+                  commit_sha: $commit_sha,
+                  repository_url: $repository_url
+                },
+                env: $env,
+                service: $service,
+                version: $version,
+                custom_tags: ($custom_tags | split("\n") | map(select(length > 0)))
+              } + (if $team != "" then {team: $team} else {} end))
+            }
+          }' \
+          > "$request_payload_file_path"
+
+        echo 'Request:'
+        cat "$request_payload_file_path"
+
+        echo 'Response:'
+        response_file_path="${RUNNER_TEMP:?}/datadog_dora_deployment_response.json"
+        curl_exit_code=0
+        curl --fail-with-body --silent --show-error \
+          --request POST \
+          --header "Accept: application/json" \
+          --header "Content-Type: application/json" \
+          --header "DD-API-KEY: ${DD_API_KEY:?}" \
+          --data "@${request_payload_file_path}" \
+          "https://api.${DATADOG_SITE:?}/api/v2/dora/deployment" \
+          > "$response_file_path" || curl_exit_code=$?
+        cat "$response_file_path" # Also when the request failed, as it carries Datadog's error.
+        echo
+        if [ "$curl_exit_code" -ne 0 ]; then
+          exit "$curl_exit_code"
+        fi
+
+        echo "deployment_id=$(jq -r '.data.id' "$response_file_path")" >> "$GITHUB_OUTPUT"
+      env:
+        CUSTOM_TAGS: |-
+          github.run_id:${{ github.run_id }}
+          github.run_attempt:${{ github.run_attempt }}
+          ${{ inputs.custom_tags }}
+        DATADOG_SITE: ${{ inputs.datadog_site }}
+        DD_API_KEY: ${{ inputs.datadog_api_key }}
+        DEPLOY_ENV: ${{ inputs.deploy_env }}
+        DEPLOYMENT_FINISHED_AT: ${{ inputs.deployment_finished_at }}
+        DEPLOYMENT_STARTED_AT: ${{ inputs.deployment_started_at }}
+        SERVICE: ${{ inputs.service }}
+        TEAM: ${{ inputs.team }}
+        VCS_REPOSITORY_URL: ${{ inputs.vcs_repository_url }}
+        VCS_REVISION_ID: ${{ inputs.vcs_revision_id }}
+        VERSION: ${{ inputs.version }}

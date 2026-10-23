@@ -1,7 +1,9 @@
 # GitHub Actions Workflow for Datadog DORA Deployment
 #
 # It sends a deployment event to Datadog DORA Metrics, for a service whose deployments Datadog does
-# not detect by itself, as it does through APM Deployment Tracking.
+# not detect by itself, as it does through APM Deployment Tracking. It runs as a job of its own: a
+# job that has to time its own deployment uses the action `datadog-dora-deployment` as a step
+# instead, which this workflow runs too.
 #
 # - Documentation: https://docs.datadoghq.com/delivery_performance/dora_metrics/setup/
 # - API: https://docs.datadoghq.com/api/latest/delivery-performance/send-a-deployment-event/
@@ -84,98 +86,20 @@ jobs:
       deployment_id: ${{ steps.send_deployment_event.outputs.deployment_id }}
 
     steps:
+      # The action is taken from `master`, the branch callers take this workflow from, because a
+      # reusable workflow cannot refer to an action of its own VCS repository at its own revision.
       - name: Send Deployment Event
         id: send_deployment_event
-        run: |
-          if [ -z "$DEPLOYMENT_STARTED_AT" ] && [ -z "$DEPLOYMENT_FINISHED_AT" ]; then
-            echo '::notice::No deployment timestamps were given. Using those of this workflow run.'
-            DEPLOYMENT_STARTED_AT=$(date +'%s%N')
-            sleep 0.100 # Wait because Datadog does not accept equal start and end timestamps.
-            DEPLOYMENT_FINISHED_AT=$(date +'%s%N')
-          elif [ -z "$DEPLOYMENT_STARTED_AT" ] || [ -z "$DEPLOYMENT_FINISHED_AT" ]; then
-            echo '::error::Give both deployment timestamps, or neither of them.'
-            exit 1
-          fi
-
-          # The timestamps are converted to milliseconds, because jq 1.6 converts numbers to
-          # floating point, which cannot represent a timestamp in nanoseconds exactly.
-          to_unix_timestamp_ms() {
-            case "$1" in
-              '' | *[!0-9]*) ;;
-              ??????????) echo "$(( $1 * 1000 ))"; return ;;
-              ?????????????) echo "$1"; return ;;
-              ???????????????????) echo "$(( $1 / 1000000 ))"; return ;;
-            esac
-            echo "::error::Invalid Unix timestamp (s, ms or ns): '$1'." >&2
-            return 1
-          }
-          DEPLOYMENT_STARTED_AT=$(to_unix_timestamp_ms "$DEPLOYMENT_STARTED_AT")
-          DEPLOYMENT_FINISHED_AT=$(to_unix_timestamp_ms "$DEPLOYMENT_FINISHED_AT")
-
-          # The payload is built with jq, rather than in a here-document, so that no input can
-          # break its JSON syntax.
-          request_payload_file_path="${RUNNER_TEMP:?}/datadog_dora_deployment_request.json"
-          jq --null-input \
-            --arg commit_sha "${VCS_REVISION_ID:?}" \
-            --arg custom_tags "$CUSTOM_TAGS" \
-            --arg env "${DEPLOY_ENV:?}" \
-            --arg finished_at "${DEPLOYMENT_FINISHED_AT:?}" \
-            --arg repository_url "${VCS_REPOSITORY_URL:?}" \
-            --arg service "${SERVICE:?}" \
-            --arg started_at "${DEPLOYMENT_STARTED_AT:?}" \
-            --arg team "$TEAM" \
-            --arg version "${VERSION:-$VCS_REVISION_ID}" \
-            '{
-              data: {
-                attributes: ({
-                  started_at: ($started_at | tonumber),
-                  finished_at: ($finished_at | tonumber),
-                  git: {
-                    commit_sha: $commit_sha,
-                    repository_url: $repository_url
-                  },
-                  env: $env,
-                  service: $service,
-                  version: $version,
-                  custom_tags: ($custom_tags | split("\n") | map(select(length > 0)))
-                } + (if $team != "" then {team: $team} else {} end))
-              }
-            }' \
-            > "$request_payload_file_path"
-
-          echo 'Request:'
-          cat "$request_payload_file_path"
-
-          echo 'Response:'
-          response_file_path="${RUNNER_TEMP:?}/datadog_dora_deployment_response.json"
-          curl_exit_code=0
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Accept: application/json" \
-            --header "Content-Type: application/json" \
-            --header "DD-API-KEY: ${DD_API_KEY:?}" \
-            --data "@${request_payload_file_path}" \
-            "https://api.${DATADOG_SITE:?}/api/v2/dora/deployment" \
-            > "$response_file_path" || curl_exit_code=$?
-          cat "$response_file_path" # Also when the request failed, as it carries Datadog's error.
-          echo
-          if [ "$curl_exit_code" -ne 0 ]; then
-            exit "$curl_exit_code"
-          fi
-
-          echo "deployment_id=$(jq -r '.data.id' "$response_file_path")" >> "$GITHUB_OUTPUT"
-        env:
-          CUSTOM_TAGS: |-
-            github.run_id:${{ github.run_id }}
-            github.run_attempt:${{ github.run_attempt }}
-            ${{ inputs.custom_tags }}
-          DATADOG_SITE: ${{ inputs.datadog_site }}
-          DD_API_KEY: ${{ secrets.datadog_api_key }}
-          DEPLOY_ENV: ${{ inputs.deploy_env }}
-          DEPLOYMENT_FINISHED_AT: ${{ inputs.deployment_finished_at }}
-          DEPLOYMENT_STARTED_AT: ${{ inputs.deployment_started_at }}
-          SERVICE: ${{ inputs.service }}
-          TEAM: ${{ inputs.team }}
-          VCS_REPOSITORY_URL: ${{ inputs.vcs_repository_url }}
-          VCS_REVISION_ID: ${{ inputs.vcs_revision_id }}
-          VERSION: ${{ inputs.version }}
+        uses: cordada/github-actions-utils/.github/actions/datadog-dora-deployment@master
+        with:
+          service: ${{ inputs.service }}
+          deploy_env: ${{ inputs.deploy_env }}
+          vcs_revision_id: ${{ inputs.vcs_revision_id }}
+          vcs_repository_url: ${{ inputs.vcs_repository_url }}
+          version: ${{ inputs.version }}
+          deployment_started_at: ${{ inputs.deployment_started_at }}
+          deployment_finished_at: ${{ inputs.deployment_finished_at }}
+          team: ${{ inputs.team }}
+          custom_tags: ${{ inputs.custom_tags }}
+          datadog_site: ${{ inputs.datadog_site }}
+          datadog_api_key: ${{ secrets.datadog_api_key }}
