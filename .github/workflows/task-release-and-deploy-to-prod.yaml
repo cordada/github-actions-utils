@@ -29,7 +29,7 @@ on:
       github_pull_request_draft:
         type: boolean
         required: false
-        default: true
+        default: false
         description: Whether the GitHub pull request is opened as a draft.
       request_reviews_from_change_authors:
         type: boolean
