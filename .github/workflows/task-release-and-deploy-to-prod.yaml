@@ -26,6 +26,11 @@ on:
           kind: release
           kind: deploy
         description: Labels of the GitHub Pull Request, One per Line
+      github_pull_request_draft:
+        type: boolean
+        required: false
+        default: false
+        description: Whether the GitHub pull request is opened as a draft.
       request_reviews_from_change_authors:
         type: boolean
         required: false
@@ -143,7 +148,7 @@ jobs:
             gh pr create \
               --base "$PRODUCTION_VCS_REF" \
               --head "$RELEASE_VCS_REF" \
-              --draft \
+              --draft="$GITHUB_PULL_REQUEST_DRAFT" \
               --title 'Release and deploy to production' \
               --body-file "$CHANGELOG_FILE_PATH" \
               --assignee "$RELEASE_ASSIGNEE" \
@@ -156,6 +161,7 @@ jobs:
           RELEASE_ASSIGNEE: ${{ github.actor }}
           CHANGELOG_FILE_PATH: ${{ steps.generate_changelog.outputs.changelog_file_path }}
           GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
+          GITHUB_PULL_REQUEST_DRAFT: ${{ inputs.github_pull_request_draft }}
 
       - name: Create Checklist
         if: ${{ steps.check_changes.outputs.has_changes == 'true' }}

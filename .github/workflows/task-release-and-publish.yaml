@@ -22,6 +22,11 @@ on:
           task
           kind: publish
         description: Labels of the GitHub Pull Request, One per Line
+      github_pull_request_draft:
+        type: boolean
+        required: false
+        default: false
+        description: Whether the GitHub pull request is opened as a draft.
       request_reviews_from_change_authors:
         type: boolean
         required: false
@@ -168,7 +173,7 @@ jobs:
             gh pr create \
               --base "$RELEASE_VCS_REF" \
               --head "$(< "$publication_dir_path/vcs-ref")" \
-              --draft \
+              --draft="$GITHUB_PULL_REQUEST_DRAFT" \
               --title "$(< "$publication_dir_path/title")" \
               --body-file "$publication_dir_path/description.md" \
               --assignee "$(< "$publication_dir_path/assignee")" \
@@ -179,6 +184,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_PULL_REQUEST_LABELS: ${{ inputs.github_pull_request_labels }}
+          GITHUB_PULL_REQUEST_DRAFT: ${{ inputs.github_pull_request_draft }}
 
       - name: Create Checklist
         if: >-
